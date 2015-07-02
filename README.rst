@@ -1,2 +1,4 @@
-# plasticine
+elasticine
+==========
+
 Elastic migration tool
