@@ -12,7 +12,7 @@ with codecs.open(os.path.join(os.path.abspath(os.path.dirname(
         raise RuntimeError('Unable to determine version.')
 
 
-install_requires = ['elasticsearch', 'yaml']
+install_requires = ['elasticsearch', 'pyyaml']
 
 tests_require = install_requires + ['nose']
 

@@ -1,3 +1,4 @@
 # Install all optional deps for full test coverage
 jinja2
+nose
 
