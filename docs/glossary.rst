@@ -20,7 +20,7 @@ Glossary
    migration
 
       :term:`revision` consists of migrations. You can define only 1 migration
-      per index, and only 1 migration for this index in a :term:`revision`.
+      per index per :term:`revision`.
 
    lazy migration
 
