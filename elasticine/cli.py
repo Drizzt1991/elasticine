@@ -3,12 +3,15 @@ from __future__ import print_function
 import os
 import os.path
 import shutil
+import yaml
 from argparse import ArgumentParser
 
 try:
     import jinja2
 except ImportError:
     jinja2 = None
+
+from . import utils
 
 # FIXME: Load from `templates` folder by os.listdir maybe...
 TEMPLATES = ['generic']
@@ -18,6 +21,10 @@ TEMPLATE_FOLDER = os.path.join(os.path.dirname(__file__), "templates")
 def setup_parsers():
     main_parser = ArgumentParser(
         description="Elastic migration tool")
+    main_parser.add_argument(
+        "-c", "--config", help="Path to config file",
+        default="./elasticine.yaml")
+
     subparsers = main_parser.add_subparsers(
         metavar="COMMAND", help="Select one of following commands:")
 
@@ -32,15 +39,20 @@ def setup_parsers():
         'current',
         help='Show current revision of Elastic cluster')
 
-    # ``migrate`` command
-    subparsers.add_parser(
-        'migrate',
+    # ``upgrade`` command
+    upgrade = subparsers.add_parser(
+        'upgrade',
         help='Perform data migration on Elastic cluster')
+    upgrade.add_argument(
+        "revision",
+        help="Revision to upgrade to. You can also specify an `int` for number"
+             " of revisions to upgrade")
+    upgrade.set_defaults(command=UpgradeCommand())
 
     # ``revision`` command
     subparsers.add_parser(
         'revision',
-        help='Create a new revision file in `versions` folder')
+        help='Create a new revision file in `revisions` folder')
 
     # ``init`` command
     init = subparsers.add_parser(
@@ -63,10 +75,11 @@ def main():
     parser = setup_parsers()
     args = parser.parse_args()
     # Execute subcommand set by `set_defaults` of subparser
-    try:
-        args.command(args)
-    except CommandError as exc:
-        print('error: {}'.format(exc))
+    if hasattr(args, 'command'):
+        try:
+            args.command(args)
+        except CommandError as exc:
+            print('error: {}'.format(exc))
 
 
 class CommandError(Exception):
@@ -85,6 +98,34 @@ class Command(object):
     def __call__(self, args):
         raise NotImplementedError
 
+    def validate_config(self, args, config):
+        if 'elasticine' not in config:
+            raise CommandError(
+                "Bad config file: could not find `elasticine` section")
+        if 'elastic' not in config['elasticine']:
+            raise CommandError(
+                "Bad config file: did not find adapter config at"
+                " `elasticine.elastic`")
+
+        revisions_folder = config["elasticine"].get("revisions_folder")
+        if revisions_folder is None:
+            revisions_folder = "./"
+        # We will lookup path's from config file location if relative
+        if not os.path.isabs(revisions_folder):
+            base = os.path.dirname(args.config)
+            revisions_folder = os.path.join(base, revisions_folder)
+        config['elasticine']['revisions_folder'] = revisions_folder
+
+        return config
+
+    def load_config(self, args):
+        if os.path.exists(args.config):
+            with open(args.config) as f:
+                return self.validate_config(args, yaml.load(f))
+        else:
+            raise CommandError(
+                "Config at {} does not exist".format(args.config))
+
     def status(self, msg):
         print(' '*2 + msg)
 
@@ -96,6 +137,17 @@ class HistoryCommand(Command):
 
     def __call__(self, args):
         pass
+
+
+class UpgradeCommand(Command):
+
+    def __call__(self, args):
+        config = self.load_config(args)
+
+        environment = utils.import_file_as_py(
+            os.path.join(config['elasticine']['revisions_folder'], 'env.py'))
+
+        migrator = environment.configure(config)
 
 
 class InitCommand(Command):
